@@ -57,3 +57,63 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Form field spacing improvements */
+.form-field-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Ensure labels don't collide with inputs */
+[data-slot="label"] {
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+}
+
+/* Consistent input heights */
+input[type="text"],
+input[type="email"],
+select,
+textarea {
+  line-height: 1.5;
+}
+
+/* Better spacing for form sections */
+.form-section {
+  margin-bottom: 1.5rem;
+}
+
+/* Dropdown z-index fixes */
+[data-slot="base"] {
+  z-index: 9999 !important;
+}
+
+/* NextUI Select dropdown popover */
+[data-slot="popoverContent"] {
+  z-index: 9999 !important;
+}
+
+/* Ensure dropdowns appear above everything */
+[data-slot="listboxWrapper"] {
+  z-index: 9999 !important;
+}
+
+/* Fix for NextUI Select dropdown overlay */
+.nextui-popover-content {
+  z-index: 9999 !important;
+}
+
+/* Ensure proper spacing between form fields */
+.grid > div {
+  margin-bottom: 0.5rem;
+}
+
+/* Label spacing */
+label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
