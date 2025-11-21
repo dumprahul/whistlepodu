@@ -1,10 +1,10 @@
 'use client';
 
-import { XXNetwork, XXDirectMessages, useSDKStatus, useCredentialsStatus } from "./xxdk";
+import { XXNetwork, XXDirectMessages, useSDKStatus, useCredentialsStatus, XXDMSend, useDMClient } from "./xxdk";
 import { Button } from "@nextui-org/button";
 import { Input } from "@nextui-org/input";
 import { Select, SelectItem } from "@nextui-org/select";
-import { useState, ChangeEvent } from "react";
+import { useState, ChangeEvent, useContext } from "react";
 
 function StatusButton({ status, label }: { status: 'initializing' | 'ready' | 'error', label: string }) {
   const getStatusColor = () => {
@@ -42,20 +42,24 @@ function StatusButton({ status, label }: { status: 'initializing' | 'ready' | 'e
 }
 
 function WhistleblowerForm() {
+  const dm = useDMClient();
+  
+  // Client 2 (Resolver) hardcoded credentials
+  const CLIENT2_TOKEN = '2537252129';
+  const CLIENT2_PUBLIC_KEY = 'C0nFOJ9kcaSz6cN5/aDqiAnzOVXfC9ogg7JRvzrZ76E=';
+
   const [formData, setFormData] = useState({
     issueType: '',
     category: '',
     severity: '',
     location: '',
-    organization: '',
     description: '',
     evidence: '',
-    contactPreference: '',
-    anonymous: false,
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -65,28 +69,60 @@ function WhistleblowerForm() {
     e.preventDefault();
     setIsSubmitting(true);
     setSubmitStatus('idle');
+    setErrorMessage('');
 
-    // Simulate submission
-    setTimeout(() => {
-      console.log('Whistleblower Report Submitted:', formData);
+    // Check if DM client is ready
+    if (dm === null) {
+      setErrorMessage('DM Client not ready yet. Please wait for credentials to initialize.');
       setIsSubmitting(false);
-      setSubmitStatus('success');
-      // Reset form after 2 seconds
-      setTimeout(() => {
-        setFormData({
-          issueType: '',
-          category: '',
-          severity: '',
-          location: '',
-          organization: '',
-          description: '',
-          evidence: '',
-          contactPreference: '',
-          anonymous: false,
-        });
-        setSubmitStatus('idle');
-      }, 2000);
-    }, 1500);
+      setSubmitStatus('error');
+      return;
+    }
+
+    // Format form data as JSON
+    const reportData = {
+      type: 'whistleblower_report',
+      timestamp: new Date().toISOString(),
+      issueType: formData.issueType,
+      category: formData.category,
+      severity: formData.severity,
+      location: formData.location,
+      description: formData.description,
+      evidence: formData.evidence,
+    };
+
+    const messageText = JSON.stringify(reportData, null, 2);
+
+    try {
+      // Send message through xxdk to Client 2
+      const success = await XXDMSend(dm, messageText, CLIENT2_PUBLIC_KEY, CLIENT2_TOKEN);
+      
+      if (success) {
+        console.log('Whistleblower Report Submitted via xxdk:', reportData);
+        setSubmitStatus('success');
+        // Reset form after 2 seconds
+        setTimeout(() => {
+          setFormData({
+            issueType: '',
+            category: '',
+            severity: '',
+            location: '',
+            description: '',
+            evidence: '',
+          });
+          setSubmitStatus('idle');
+        }, 2000);
+      } else {
+        setErrorMessage('Failed to send report. Please check console for details and try again.');
+        setSubmitStatus('error');
+      }
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      setErrorMessage('An error occurred while sending the report. Please try again.');
+      setSubmitStatus('error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -117,23 +153,41 @@ function WhistleblowerForm() {
               popoverProps={{
                 placement: "bottom-start",
                 classNames: {
-                  content: "z-[9999]",
+                  content: "z-[9999] p-2 bg-white border border-gray-200 rounded-lg shadow-xl",
                 },
               }}
               classNames={{
-                trigger: "min-h-12 bg-white border border-gray-300 rounded-lg",
-                value: "text-gray-900",
+                trigger: "min-h-12 bg-white border-2 border-gray-300 rounded-lg hover:border-green-400 focus:border-green-500 transition-colors shadow-sm",
+                value: "text-gray-900 font-medium",
                 popoverContent: "z-[9999]",
+                listbox: "p-2 gap-1",
+                listboxWrapper: "max-h-[300px] overflow-y-auto",
               }}
             >
-              <SelectItem key="pollution" value="pollution">Environmental Pollution</SelectItem>
-              <SelectItem key="waste" value="waste">Waste Management Violations</SelectItem>
-              <SelectItem key="emissions" value="emissions">Carbon Emissions Violations</SelectItem>
-              <SelectItem key="deforestation" value="deforestation">Deforestation/Illegal Logging</SelectItem>
-              <SelectItem key="water" value="water">Water Contamination</SelectItem>
-              <SelectItem key="wildlife" value="wildlife">Wildlife Protection Violations</SelectItem>
-              <SelectItem key="greenwashing" value="greenwashing">Greenwashing/Fraud</SelectItem>
-              <SelectItem key="other" value="other">Other Sustainability Issue</SelectItem>
+              <SelectItem key="pollution" value="pollution" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Environmental Pollution
+              </SelectItem>
+              <SelectItem key="waste" value="waste" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Waste Management Violations
+              </SelectItem>
+              <SelectItem key="emissions" value="emissions" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Carbon Emissions Violations
+              </SelectItem>
+              <SelectItem key="deforestation" value="deforestation" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Deforestation/Illegal Logging
+              </SelectItem>
+              <SelectItem key="water" value="water" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Water Contamination
+              </SelectItem>
+              <SelectItem key="wildlife" value="wildlife" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Wildlife Protection Violations
+              </SelectItem>
+              <SelectItem key="greenwashing" value="greenwashing" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Greenwashing/Fraud
+              </SelectItem>
+              <SelectItem key="other" value="other" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Other Sustainability Issue
+              </SelectItem>
             </Select>
           </div>
 
@@ -152,20 +206,32 @@ function WhistleblowerForm() {
               popoverProps={{
                 placement: "bottom-start",
                 classNames: {
-                  content: "z-[9999]",
+                  content: "z-[9999] p-2 bg-white border border-gray-200 rounded-lg shadow-xl",
                 },
               }}
               classNames={{
-                trigger: "min-h-12 bg-white border border-gray-300 rounded-lg",
-                value: "text-gray-900",
+                trigger: "min-h-12 bg-white border-2 border-gray-300 rounded-lg hover:border-green-400 focus:border-green-500 transition-colors shadow-sm",
+                value: "text-gray-900 font-medium",
                 popoverContent: "z-[9999]",
+                listbox: "p-2 gap-1",
+                listboxWrapper: "max-h-[300px] overflow-y-auto",
               }}
             >
-              <SelectItem key="corporate" value="corporate">Corporate</SelectItem>
-              <SelectItem key="government" value="government">Government</SelectItem>
-              <SelectItem key="ngo" value="ngo">NGO/Non-Profit</SelectItem>
-              <SelectItem key="individual" value="individual">Individual</SelectItem>
-              <SelectItem key="international" value="international">International Organization</SelectItem>
+              <SelectItem key="corporate" value="corporate" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Corporate
+              </SelectItem>
+              <SelectItem key="government" value="government" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Government
+              </SelectItem>
+              <SelectItem key="ngo" value="ngo" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                NGO/Non-Profit
+              </SelectItem>
+              <SelectItem key="individual" value="individual" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Individual
+              </SelectItem>
+              <SelectItem key="international" value="international" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                International Organization
+              </SelectItem>
             </Select>
           </div>
 
@@ -184,25 +250,35 @@ function WhistleblowerForm() {
               popoverProps={{
                 placement: "bottom-start",
                 classNames: {
-                  content: "z-[9999]",
+                  content: "z-[9999] p-2 bg-white border border-gray-200 rounded-lg shadow-xl",
                 },
               }}
               classNames={{
-                trigger: "min-h-12 bg-white border border-gray-300 rounded-lg",
-                value: "text-gray-900",
+                trigger: "min-h-12 bg-white border-2 border-gray-300 rounded-lg hover:border-green-400 focus:border-green-500 transition-colors shadow-sm",
+                value: "text-gray-900 font-medium",
                 popoverContent: "z-[9999]",
+                listbox: "p-2 gap-1",
+                listboxWrapper: "max-h-[300px] overflow-y-auto",
               }}
             >
-              <SelectItem key="low" value="low">Low - Minor violation</SelectItem>
-              <SelectItem key="medium" value="medium">Medium - Moderate concern</SelectItem>
-              <SelectItem key="high" value="high">High - Serious violation</SelectItem>
-              <SelectItem key="critical" value="critical">Critical - Immediate threat</SelectItem>
+              <SelectItem key="low" value="low" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Low - Minor violation
+              </SelectItem>
+              <SelectItem key="medium" value="medium" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Medium - Moderate concern
+              </SelectItem>
+              <SelectItem key="high" value="high" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                High - Serious violation
+              </SelectItem>
+              <SelectItem key="critical" value="critical" className="rounded-lg py-2 px-3 hover:bg-green-50">
+                Critical - Immediate threat
+              </SelectItem>
             </Select>
           </div>
 
           <div className="flex flex-col">
             <label className="text-sm font-medium text-gray-700 mb-3 block">
-              Location <span className="text-red-500">*</span>
+              Location of Happening <span className="text-red-500">*</span>
             </label>
             <Input
               placeholder="City, Country or Region"
@@ -210,55 +286,10 @@ function WhistleblowerForm() {
               onChange={(e) => handleChange('location', e.target.value)}
               isRequired
               classNames={{
-                input: "min-h-12 text-gray-900",
-                inputWrapper: "bg-white border border-gray-300",
+                input: "min-h-12 text-gray-900 font-medium",
+                inputWrapper: "bg-white border-2 border-gray-300 hover:border-green-400 focus-within:border-green-500 transition-colors shadow-sm rounded-lg",
               }}
             />
-          </div>
-
-          <div className="flex flex-col">
-            <label className="text-sm font-medium text-gray-700 mb-3 block">
-              Organization/Entity Name <span className="text-red-500">*</span>
-            </label>
-            <Input
-              placeholder="Name of the organization involved"
-              value={formData.organization}
-              onChange={(e) => handleChange('organization', e.target.value)}
-              isRequired
-              classNames={{
-                input: "min-h-12 text-gray-900",
-                inputWrapper: "bg-white border border-gray-300",
-              }}
-            />
-          </div>
-
-          <div className="flex flex-col relative z-10">
-            <label className="text-sm font-medium text-gray-700 mb-3 block">
-              Contact Preference
-            </label>
-            <Select
-              placeholder="How should we contact you?"
-              selectedKeys={formData.contactPreference ? [formData.contactPreference] : []}
-              onSelectionChange={(keys) => {
-                const value = Array.from(keys)[0] as string;
-                handleChange('contactPreference', value);
-              }}
-              popoverProps={{
-                placement: "bottom-start",
-                classNames: {
-                  content: "z-[9999]",
-                },
-              }}
-              classNames={{
-                trigger: "min-h-12 bg-white border border-gray-300 rounded-lg",
-                value: "text-gray-900",
-                popoverContent: "z-[9999]",
-              }}
-            >
-              <SelectItem key="anonymous" value="anonymous">Remain Anonymous</SelectItem>
-              <SelectItem key="email" value="email">Email</SelectItem>
-              <SelectItem key="secure" value="secure">Secure Channel (via this platform)</SelectItem>
-            </Select>
           </div>
         </div>
 
@@ -267,7 +298,7 @@ function WhistleblowerForm() {
             Detailed Description <span className="text-red-500">*</span>
           </label>
           <textarea
-            className="w-full min-h-[140px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y text-sm"
+            className="w-full min-h-[140px] p-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 hover:border-green-400 transition-colors resize-y text-sm shadow-sm font-medium"
             placeholder="Provide a detailed description of the issue, including dates, times, and any relevant context..."
             value={formData.description}
             onChange={(e) => handleChange('description', e.target.value)}
@@ -280,24 +311,11 @@ function WhistleblowerForm() {
             Evidence/Supporting Information
           </label>
           <textarea
-            className="w-full min-h-[120px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 resize-y text-sm"
-            placeholder="Links to documents, photos, videos, or any other evidence (if available)..."
+            className="w-full min-h-[120px] p-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 hover:border-green-400 transition-colors resize-y text-sm shadow-sm font-medium"
+            placeholder="Links to Evidence"
             value={formData.evidence}
             onChange={(e) => handleChange('evidence', e.target.value)}
           />
-        </div>
-
-        <div className="mb-8 flex items-center gap-3">
-          <input
-            type="checkbox"
-            id="anonymous"
-            checked={formData.anonymous}
-            onChange={(e) => handleChange('anonymous', e.target.checked)}
-            className="w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-green-500 cursor-pointer"
-          />
-          <label htmlFor="anonymous" className="text-sm text-gray-700 cursor-pointer">
-            I want to remain completely anonymous
-          </label>
         </div>
 
         <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
@@ -310,11 +328,8 @@ function WhistleblowerForm() {
                 category: '',
                 severity: '',
                 location: '',
-                organization: '',
                 description: '',
                 evidence: '',
-                contactPreference: '',
-                anonymous: false,
               });
             }}
             className="min-w-[120px]"
@@ -325,7 +340,7 @@ function WhistleblowerForm() {
             type="submit"
             color="success"
             isLoading={isSubmitting}
-            isDisabled={!formData.issueType || !formData.category || !formData.severity || !formData.location || !formData.organization || !formData.description}
+            isDisabled={!dm || !formData.issueType || !formData.category || !formData.severity || !formData.location || !formData.description}
             className="min-w-[140px]"
           >
             {submitStatus === 'success' ? 'Submitted ✓' : 'Submit Report'}
@@ -335,7 +350,15 @@ function WhistleblowerForm() {
         {submitStatus === 'success' && (
           <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
             <p className="text-green-800 font-medium text-sm">
-              ✓ Your report has been submitted securely. Thank you for helping protect our planet!
+              ✓ Your report has been submitted securely via xx Network. Thank you for helping protect our planet!
+            </p>
+          </div>
+        )}
+
+        {submitStatus === 'error' && errorMessage && (
+          <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-red-800 font-medium text-sm">
+              ✗ {errorMessage}
             </p>
           </div>
         )}

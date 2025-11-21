@@ -440,6 +440,10 @@ export function useCredentialsStatus() {
     return useContext(CredentialsStatusContext);
 }
 
+export function useDMClient() {
+    return useContext(XXDMClient);
+}
+
 // XXDirectMessagesReceived is just a buffer of received event messages
 export function XXDirectMessagesReceived() {
     const msgs = useContext(XXDMReceiver);
