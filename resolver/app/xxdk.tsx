@@ -19,6 +19,10 @@ const DM_ID_STORAGE_KEY = 'MyDMID_client2';
 const CLIENT_LOG_PREFIX = '🔵 CLIENT 2 - ';
 const MESSAGE_DB_PASSWORD = 'MessageStoragePassword';
 
+// Hardcoded credentials for Client 2
+const HARDCODED_TOKEN = '2537252129';
+const HARDCODED_PUBLIC_KEY = 'C0nFOJ9kcaSz6cN5/aDqiAnzOVXfC9ogg7JRvzrZ76E=';
+
 // XXContext is used to pass in "XXDKUtils", which
 // provides access to all xx network functions to the children
  
@@ -101,11 +105,16 @@ export function XXDirectMessages({ children }: { children: React.ReactNode }) {
             return;
         }
         
+        // Use hardcoded identity if available, otherwise generate new one
+        // Note: The identity blob must produce the hardcoded token and public key
         var dmIDStr = localStorage.getItem(DM_ID_STORAGE_KEY);
         if (dmIDStr === null) {
-            console.log("Generating DM Identity...");
+            console.log(`${CLIENT_LOG_PREFIX}Generating DM Identity...`);
+            // Generate identity and verify it matches hardcoded credentials
+            // If it doesn't match, we'll need to use a pre-generated identity blob
             dmIDStr = Buffer.from(xx.GenerateChannelIdentity(xxNet.GetID())).toString('base64');
             localStorage.setItem(DM_ID_STORAGE_KEY, dmIDStr);
+            console.log(`${CLIENT_LOG_PREFIX}Generated new identity. If credentials don't match hardcoded values, you may need to provide the correct identity blob.`);
         }
         console.log(`${CLIENT_LOG_PREFIX}Exported Codename Blob: ${dmIDStr}`);
         // Note: we parse to convert to Byte Array
@@ -171,8 +180,17 @@ export function XXDirectMessages({ children }: { children: React.ReactNode }) {
                     const pubKey = Buffer.from(client.GetPublicKey()).toString('base64');
                     console.log(`${CLIENT_LOG_PREFIX}DMTOKEN: ${token}`);
                     console.log(`${CLIENT_LOG_PREFIX}DMPUBKEY: ${pubKey}`);
+                    
+                    // Verify credentials match hardcoded values
+                    if (String(token) !== HARDCODED_TOKEN || pubKey !== HARDCODED_PUBLIC_KEY) {
+                        console.warn(`${CLIENT_LOG_PREFIX}⚠️ WARNING: Generated credentials don't match hardcoded values!`);
+                        console.warn(`${CLIENT_LOG_PREFIX}Expected Token: ${HARDCODED_TOKEN}, Got: ${token}`);
+                        console.warn(`${CLIENT_LOG_PREFIX}Expected PubKey: ${HARDCODED_PUBLIC_KEY}, Got: ${pubKey}`);
+                        console.warn(`${CLIENT_LOG_PREFIX}You may need to provide the correct identity blob that produces these credentials.`);
+                    }
 
-                    const dbName = pubKey.replace(/={1,2}$/, '');
+                    // Use hardcoded public key for database name to ensure consistency
+                    const dbName = HARDCODED_PUBLIC_KEY.replace(/={1,2}$/, '');
                     const db = new Dexie(dbName + "_speakeasy_dm")
                     db.open().then(() => {
                         console.log(db);
@@ -311,16 +329,9 @@ export function XXMsgSender({
 
 export function XXMyCredentials({ title = "📋 MY CREDENTIALS", accentClass = "border-blue-300 bg-blue-50" }: { title?: string; accentClass?: string }) {
     const dm = useContext(XXDMClient);
-    const [token, setToken] = useState<string>("");
-    const [pubKey, setPubKey] = useState<string>("");
-
-    useEffect(() => {
-        if (!dm) {
-            return;
-        }
-        setToken(String(dm.GetToken()));
-        setPubKey(Buffer.from(dm.GetPublicKey()).toString('base64'));
-    }, [dm]);
+    // Always use hardcoded values for Client 2
+    const [token] = useState<string>(HARDCODED_TOKEN);
+    const [pubKey] = useState<string>(HARDCODED_PUBLIC_KEY);
 
     return (
         <div className={`w-full rounded border p-4 ${accentClass}`}>
