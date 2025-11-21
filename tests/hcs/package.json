@@ -1,0 +1,17 @@
+{
+  "name": "hcs",
+  "version": "1.0.0",
+  "main": "hcs-functions.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node hcs-functions.js",
+    "hcs": "node hcs-functions.js"
+  },
+  "keywords": ["hedera", "hcs", "consensus-service"],
+  "author": "",
+  "license": "ISC",
+  "description": "Hedera Consensus Service (HCS) functions for topic management",
+  "dependencies": {
+    "@hashgraph/sdk": "^2.64.5"
+  }
+}
