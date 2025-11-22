@@ -175,6 +175,52 @@ export function XXDirectMessages({ children }: { children: React.ReactNode }) {
                 setDMReceiver((prev) => [...prev, `🔗 HCS: Transaction ID: ${result.transactionId}`]);
                 setDMReceiver((prev) => [...prev, `📊 HCS: Status: ${result.status}`]);
                 setDMReceiver((prev) => [...prev, `🌐 HCS: Explorer: ${result.hashscanUrl}`]);
+
+                // After successful HCS commit, trigger HTS token transfer
+                try {
+                    // Parse the message to extract Hedera Account ID
+                    let reportData = null;
+                    try {
+                        reportData = JSON.parse(message);
+                    } catch (e) {
+                        // Not JSON, skip token transfer
+                        console.log(`${CLIENT_LOG_PREFIX}Message is not JSON, skipping token transfer`);
+                        return result;
+                    }
+
+                    // Extract Hedera Account ID from the report
+                    const hederaAccountId = reportData?.hederaAccountId || reportData?.evmAddress; // fallback to evmAddress for backward compatibility
+
+                    if (hederaAccountId && /^0\.0\.\d+$/.test(hederaAccountId)) {
+                        // Transfer 10 WHISTLE tokens to the user's account
+                        setDMReceiver((prev) => [...prev, `🎁 HTS: Initiating token transfer to ${hederaAccountId}...`]);
+                        
+                        const { transferWhistleTokens } = await import('@/lib/hts-client');
+                        const transferResult = await transferWhistleTokens(hederaAccountId, 10);
+                        
+                        console.log(`${CLIENT_LOG_PREFIX}✅ Token transfer successful`);
+                        console.log(`${CLIENT_LOG_PREFIX}Transfer Transaction ID: ${transferResult.transactionId}`);
+                        console.log(`${CLIENT_LOG_PREFIX}Transfer Hashscan URL: ${transferResult.hashscanUrl}`);
+                        
+                        // Add detailed HTS logs to the UI
+                        setDMReceiver((prev) => [...prev, `✅ HTS: 10 WHISTLE tokens transferred successfully`]);
+                        setDMReceiver((prev) => [...prev, `💰 HTS: To Account: ${transferResult.toAccount}`]);
+                        setDMReceiver((prev) => [...prev, `🔗 HTS: Transaction ID: ${transferResult.transactionId}`]);
+                        setDMReceiver((prev) => [...prev, `📊 HTS: Status: ${transferResult.status}`]);
+                        setDMReceiver((prev) => [...prev, `🌐 HTS: Explorer: ${transferResult.hashscanUrl}`]);
+                    } else {
+                        console.log(`${CLIENT_LOG_PREFIX}No valid Hedera Account ID found in message, skipping token transfer`);
+                        setDMReceiver((prev) => [...prev, `⚠️ HTS: No valid Hedera Account ID found in message`]);
+                    }
+                } catch (htsError: any) {
+                    console.error(`${CLIENT_LOG_PREFIX}Failed to transfer tokens:`, htsError);
+                    const htsErrorMessage = htsError?.message || 'Unknown error';
+                    setDMReceiver((prev) => [...prev, `❌ HTS: Failed to transfer tokens - ${htsErrorMessage}`]);
+                    setDMReceiver((prev) => [...prev, `⚠️ HTS: Error occurred at ${new Date().toLocaleString()}`]);
+                    // Don't throw - HCS commit was successful, token transfer failure shouldn't break the flow
+                }
+                
+                return result;
             } catch (error: any) {
                 console.error(`${CLIENT_LOG_PREFIX}Failed to commit message to HCS:`, error);
                 const errorMessage = error?.message || 'Unknown error';
@@ -512,31 +558,45 @@ export function XXDirectMessagesReceived() {
     const msgOut = msgs.map((m, idx) => {
         const msgStr = String(m);
         
-        // Check if it's an HCS log message
-        if (msgStr.includes('HCS:')) {
+        // Check if it's an HCS or HTS log message
+        if (msgStr.includes('HCS:') || msgStr.includes('HTS:')) {
+            const isHTS = msgStr.includes('HTS:');
             const isSuccess = msgStr.includes('✅');
             const isError = msgStr.includes('❌');
-            const isInfo = msgStr.includes('📌') || msgStr.includes('🔗') || msgStr.includes('⏱️') || msgStr.includes('📊') || msgStr.includes('🌐');
+            const isInfo = msgStr.includes('📌') || msgStr.includes('🔗') || msgStr.includes('⏱️') || msgStr.includes('📊') || msgStr.includes('🌐') || msgStr.includes('💰') || msgStr.includes('🎁');
             const isProcessing = msgStr.includes('🔄') || msgStr.includes('⏳');
             
             // Check if it's an explorer link
             if (msgStr.includes('Explorer: ')) {
                 const url = msgStr.split('Explorer: ')[1];
+                const serviceType = isHTS ? 'HTS' : 'HCS';
                 return (
-                    <div key={`${idx}-${m}`} className="mb-2 p-3 bg-blue-50 border-l-4 border-blue-500 rounded shadow-sm">
+                    <div key={`${idx}-${m}`} className={`mb-2 p-3 border-l-4 rounded shadow-sm ${
+                        isHTS ? 'bg-purple-50 border-purple-500' : 'bg-blue-50 border-blue-500'
+                    }`}>
                         <div className="flex items-start gap-2">
-                            <span className="text-lg">🌐</span>
+                            <span className="text-lg">{isHTS ? '🎁' : '🌐'}</span>
                             <div className="flex-1">
-                                <p className="text-sm font-semibold text-blue-800 mb-1">HCS Transaction Explorer</p>
+                                <p className={`text-sm font-semibold mb-1 ${
+                                    isHTS ? 'text-purple-800' : 'text-blue-800'
+                                }`}>
+                                    {serviceType} Transaction Explorer
+                                </p>
                                 <a 
                                     href={url} 
                                     target="_blank" 
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:text-blue-800 underline break-all font-mono"
+                                    className={`text-xs underline break-all font-mono ${
+                                        isHTS ? 'text-purple-600 hover:text-purple-800' : 'text-blue-600 hover:text-blue-800'
+                                    }`}
                                 >
                                     {url}
                                 </a>
-                                <p className="text-xs text-blue-600 mt-1">Click to view on Hashscan</p>
+                                <p className={`text-xs mt-1 ${
+                                    isHTS ? 'text-purple-600' : 'text-blue-600'
+                                }`}>
+                                    Click to view on Hashscan
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -545,11 +605,19 @@ export function XXDirectMessagesReceived() {
             
             return (
                 <div key={`${idx}-${m}`} className={`mb-2 p-2 rounded text-sm ${
-                    isSuccess ? 'bg-green-50 border-l-4 border-green-500 text-green-800' :
-                    isError ? 'bg-red-50 border-l-4 border-red-500 text-red-800' :
-                    isInfo ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-800' :
-                    isProcessing ? 'bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800' :
-                    'bg-gray-50 border-l-4 border-gray-300 text-gray-700'
+                    isHTS ? (
+                        isSuccess ? 'bg-purple-50 border-l-4 border-purple-500 text-purple-800' :
+                        isError ? 'bg-red-50 border-l-4 border-red-500 text-red-800' :
+                        isInfo ? 'bg-purple-50 border-l-4 border-purple-500 text-purple-800' :
+                        isProcessing ? 'bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800' :
+                        'bg-gray-50 border-l-4 border-gray-300 text-gray-700'
+                    ) : (
+                        isSuccess ? 'bg-green-50 border-l-4 border-green-500 text-green-800' :
+                        isError ? 'bg-red-50 border-l-4 border-red-500 text-red-800' :
+                        isInfo ? 'bg-blue-50 border-l-4 border-blue-500 text-blue-800' :
+                        isProcessing ? 'bg-yellow-50 border-l-4 border-yellow-500 text-yellow-800' :
+                        'bg-gray-50 border-l-4 border-gray-300 text-gray-700'
+                    )
                 }`}>
                     <div className="flex items-center gap-2">
                         <span className="font-mono text-xs">{new Date().toLocaleTimeString()}</span>
@@ -596,10 +664,33 @@ export function XXDirectMessagesReceived() {
                     return msgStr.includes('HCS: Status: ');
                 });
                 
+                // Find HTS transaction info from subsequent messages
+                const htsTxIdMsg = msgs.slice(idx + 1).find((msg) => {
+                    const msgStr = String(msg);
+                    return msgStr.includes('HTS: Transaction ID: ');
+                });
+                const htsExplorerMsg = msgs.slice(idx + 1).find((msg) => {
+                    const msgStr = String(msg);
+                    return msgStr.includes('HTS: Explorer: ');
+                });
+                const htsToAccountMsg = msgs.slice(idx + 1).find((msg) => {
+                    const msgStr = String(msg);
+                    return msgStr.includes('HTS: To Account: ');
+                });
+                const htsStatusMsg = msgs.slice(idx + 1).find((msg) => {
+                    const msgStr = String(msg);
+                    return msgStr.includes('HTS: Status: ');
+                });
+                
                 const hcsTxId = hcsTxIdMsg ? String(hcsTxIdMsg).split('Transaction ID: ')[1]?.trim() : null;
                 const hcsExplorerUrl = hcsExplorerMsg ? String(hcsExplorerMsg).split('Explorer: ')[1]?.trim() : null;
                 const hcsTimestamp = hcsTimestampMsg ? String(hcsTimestampMsg).split('Consensus Timestamp: ')[1]?.trim() : null;
                 const hcsStatus = hcsStatusMsg ? String(hcsStatusMsg).split('Status: ')[1]?.trim() : null;
+                
+                const htsTxId = htsTxIdMsg ? String(htsTxIdMsg).split('Transaction ID: ')[1]?.trim() : null;
+                const htsExplorerUrl = htsExplorerMsg ? String(htsExplorerMsg).split('Explorer: ')[1]?.trim() : null;
+                const htsToAccount = htsToAccountMsg ? String(htsToAccountMsg).split('To Account: ')[1]?.trim() : null;
+                const htsStatus = htsStatusMsg ? String(htsStatusMsg).split('Status: ')[1]?.trim() : null;
                 
                 return (
                     <div key={`${idx}-${m}`} className="mb-4 p-5 bg-white border-2 border-green-200 rounded-lg shadow-sm hover:shadow-md transition-shadow">
@@ -731,6 +822,72 @@ export function XXDirectMessagesReceived() {
                                         <span className="text-xs text-green-700 flex items-center gap-1">
                                             <span>🔒</span>
                                             <span>Immutably stored on Hedera network</span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* HTS Token Transfer Information */}
+                        {(htsTxId || htsExplorerUrl) && (
+                            <div className="mt-4 pt-4 border-t-2 border-purple-300 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-xl">🎁</span>
+                                    <h4 className="font-bold text-purple-800">Hedera Token Service (HTS)</h4>
+                                    <span className="ml-auto text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full font-semibold">
+                                        ✅ Tokens Transferred
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    {htsToAccount && (
+                                        <div className="flex gap-2 items-center">
+                                            <span className="font-semibold text-xs text-gray-700 min-w-[110px]">To Account:</span>
+                                            <span className="text-xs text-gray-900 font-mono bg-white px-2 py-1 rounded border border-purple-200 break-all">
+                                                {htsToAccount}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className="flex gap-2 items-center">
+                                        <span className="font-semibold text-xs text-gray-700 min-w-[110px]">Amount:</span>
+                                        <span className="text-xs text-purple-700 font-semibold bg-white px-2 py-1 rounded border border-purple-200">
+                                            10 WHISTLE tokens
+                                        </span>
+                                    </div>
+                                    {htsTxId && (
+                                        <div className="flex gap-2 items-center">
+                                            <span className="font-semibold text-xs text-gray-700 min-w-[110px]">Transaction ID:</span>
+                                            <span className="text-xs text-gray-900 font-mono bg-white px-2 py-1 rounded border border-purple-200 break-all">
+                                                {htsTxId}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {htsStatus && (
+                                        <div className="flex gap-2 items-center">
+                                            <span className="font-semibold text-xs text-gray-700 min-w-[110px]">Status:</span>
+                                            <span className="text-xs text-purple-700 font-semibold bg-white px-2 py-1 rounded border border-purple-200">
+                                                {htsStatus}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {htsExplorerUrl && (
+                                        <div className="flex gap-2 items-center mt-3 pt-2 border-t border-purple-200">
+                                            <span className="font-semibold text-xs text-gray-700 min-w-[110px]">Explorer:</span>
+                                            <a
+                                                href={htsExplorerUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-xs text-purple-600 hover:text-purple-800 hover:underline font-mono break-all bg-white px-2 py-1 rounded border border-purple-200 inline-flex items-center gap-1"
+                                            >
+                                                <span>🌐</span>
+                                                <span>View on Hashscan</span>
+                                                <span>↗</span>
+                                            </a>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-3 pt-2 border-t border-purple-200">
+                                        <span className="text-xs text-purple-700 flex items-center gap-1">
+                                            <span>💰</span>
+                                            <span>10 WHISTLE tokens transferred to reporter</span>
                                         </span>
                                     </div>
                                 </div>

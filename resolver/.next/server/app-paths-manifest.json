@@ -1,5 +1,6 @@
 {
-  "/api/hcs/submit-message/route": "app/api/hcs/submit-message/route.js",
+  "/page": "app/page.js",
   "/favicon.ico/route": "app/favicon.ico/route.js",
-  "/page": "app/page.js"
+  "/api/hcs/submit-message/route": "app/api/hcs/submit-message/route.js",
+  "/api/hts/transfer-tokens/route": "app/api/hts/transfer-tokens/route.js"
 }
